@@ -1,0 +1,6 @@
+PUT http://localhost:5000/api/tickets/20/status HTTP/1.1
+Content-Type: application/json
+
+{
+  "status": "resolved"
+}
