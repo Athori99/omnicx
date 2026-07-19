@@ -1,10 +1,12 @@
 const cron = require("node-cron");
-const { Pool } = require("pg"); // Sesuaikan dengan lokasi import pool database kamu
+const pool = require("pg"); // Sesuaikan path database kamu
+const axios = require("axios");
 
-// Menjadwalkan tugas otomatis berjalan SEATAP / SETIAP 5 MENIT
-// Pola (* * * * *): Menit, Jam, Hari dari Bulan, Bulan, Hari dari Minggu
+// Jalankan otomatis setiap 5 menit
 cron.schedule("*/5 * * * *", async () => {
-  console.log("=== Memulai Sinkronisasi Otomatis (Cron Job) ===");
+  console.log(
+    "=== [CRON JOB] Memulai Sinkronisasi Real-Time dengan Rick and Morty API ===",
+  );
 
   const startTime = new Date();
   let recordsProcessed = 0;
@@ -12,17 +14,51 @@ cron.schedule("*/5 * * * *", async () => {
   let errorMessage = null;
 
   try {
-    // 1. Tempatkan logika sinkronisasi kamu di sini (misal fetch API eksternal)
-    // Contoh dummy: Kita anggap berhasil memproses 5 data baru
-    recordsProcessed = 5;
+    // 1. Ambil data dari API external
+    const response = await axios.get(
+      "https://rickandmortyapi.com/api/character",
+    );
+    const characters = response.data.results;
 
-    console.log(`Sinkronisasi berhasil memproses ${recordsProcessed} data.`);
+    // Ambil sampel 5 karakter pertama agar log tidak terlalu penuh dan beban database aman
+    const sampleCharacters = characters.slice(0, 5);
+
+    for (const char of sampleCharacters) {
+      // Kita buat format judul dan deskripsi tiket berdasarkan data API
+      const title = `Kendala Sistem: ${char.name}`;
+      const description = `Kendala pada sistem eksternal dengan status karakter: ${char.status} dan spesies: ${char.species}`;
+      const ticketStatus = "open";
+
+      // 2. Cek apakah tiket dengan judul/nama ini sudah pernah disinkronkan sebelumnya
+      // Ini mencegah database kamu penuh dengan data duplikat setiap 5 menit
+      const checkExist = await pool.query(
+        "SELECT id FROM tickets WHERE title = $1",
+        [title],
+      );
+
+      if (checkExist.rows.length === 0) {
+        // Jika belum ada, masukkan sebagai tiket baru
+        const insertQuery = `
+          INSERT INTO tickets (title, description, status) 
+          VALUES ($1, $2, $3)
+        `;
+        await pool.query(insertQuery, [title, description, ticketStatus]);
+        recordsProcessed++;
+      }
+    }
+
+    console.log(
+      `[CRON JOB] Sinkronisasi selesai. Berhasil menambahkan ${recordsProcessed} tiket baru.`,
+    );
   } catch (error) {
     status = "failed";
     errorMessage = error.message;
-    console.error("Cron job mengalami error:", errorMessage);
+    console.error(
+      "[CRON JOB] Terjadi error saat sinkronisasi API:",
+      errorMessage,
+    );
   } finally {
-    // 2. Catat riwayat aktivitas ke tabel sync_logs secara otomatis
+    // 3. Catat riwayat aktivitas ke tabel sync_logs secara otomatis
     try {
       const logText = `
         INSERT INTO sync_logs (sync_time, status, records_processed, error_message)
@@ -31,9 +67,14 @@ cron.schedule("*/5 * * * *", async () => {
       const logValues = [startTime, status, recordsProcessed, errorMessage];
 
       await pool.query(logText, logValues);
-      console.log("Riwayat sinkronisasi telah disimpan ke database.");
+      console.log(
+        "[CRON JOB] Riwayat sinkronisasi telah sukses dicatat ke tabel sync_logs.",
+      );
     } catch (dbErr) {
-      console.error("Gagal menyimpan log ke database:", dbErr.message);
+      console.error(
+        "[CRON JOB] Gagal mencatat log ke database:",
+        dbErr.message,
+      );
     }
   }
 });
