@@ -1,15 +1,12 @@
 <template>
-  <main>
-    <DashboardView />
-  </main>
+  <RouterView />
 </template>
 
 <script setup>
-import DashboardView from './views/DashboardView.vue'
+import { RouterView } from 'vue-router'
 </script>
 
 <style>
-/* Reset dasar untuk tampilan dashboard */
 body {
   margin: 0;
   background-color: #f4f6f9;

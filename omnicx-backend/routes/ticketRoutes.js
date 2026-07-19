@@ -1,120 +1,126 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../db"); // Mengambil koneksi database dari folder atasnya
+const pool = require("../db"); // Sesuaikan dengan path database kamu
 
-// 1. GET ALL TICKETS: Mengambil semua data tiket dari database
+// Menampilkan seluruh tiket untuk mengisi tabel frontend
 router.get("/", async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT * FROM tickets ORDER BY created_at DESC",
-    );
-    res.status(200).json({
-      status: "success",
-      total: result.rows.length,
-      data: result.rows,
-    });
+    const result = await pool.query("SELECT * FROM tickets ORDER BY id DESC");
+    res.json(result.rows || result[0]); // Menyesuaikan dengan library db mysql/pg
   } catch (error) {
-    console.error("❌ Gagal mengambil data tiket:", error.message);
-    res.status(500).json({ status: "error", message: "Internal Server Error" });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 2. GET TICKET BY ID: Mengambil detail satu tiket spesifik
-router.get("/:id", async (req, res) => {
+// Menyimpan tiket baru dari form frontend ke database
+router.post("/", async (req, res) => {
+  const { title, description, status } = req.body;
+
+  try {
+    // Jalankan query tanpa koma penutup yang menggantung
+    const result = await pool.query(
+      "INSERT INTO tickets (title, description, status) VALUES ($1, $2, $3) RETURNING *",
+      [title, description, status || "open"],
+    );
+
+    res.status(201).json({
+      message: "Tiket berhasil ditambahkan",
+      ticket: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Detail Error PostgreSQL:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+// RUTE STATISTIK TIKET (Ini yang dipanggil frontend)
+router.get("/stats", async (req, res) => {
+  try {
+    // 1. Hitung total tiket open
+    const openQuery = await pool.query(
+      "SELECT COUNT(*) FROM tickets WHERE status = 'open'",
+    );
+    // 2. Hitung total tiket resolved
+    const resolvedQuery = await pool.query(
+      "SELECT COUNT(*) FROM tickets WHERE status = 'resolved'",
+    );
+    // 3. Hitung total tiket closed
+    const closedQuery = await pool.query(
+      "SELECT COUNT(*) FROM tickets WHERE status = 'closed'",
+    );
+
+    // Ambil nilai count (tergantung return package database mysql/pg kamu, umumnya rows[0] atau [0])
+    const openCount = parseInt(
+      openQuery.rows ? openQuery.rows[0].count : openQuery[0].count || 0,
+    );
+    const resolvedCount = parseInt(
+      resolvedQuery.rows
+        ? resolvedQuery.rows[0].count
+        : resolvedQuery[0].count || 0,
+    );
+    const closedCount = parseInt(
+      closedQuery.rows ? closedQuery.rows[0].count : closedQuery[0].count || 0,
+    );
+
+    res.json({
+      open: openCount,
+      resolved: resolvedCount,
+      closed: closedCount,
+    });
+  } catch (error) {
+    console.error("Error fetching ticket stats:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Rute ambil semua data tiket (jika ada)
+router.get("/", async (req, res) => {
+  // ... kode ambil semua tiket
+});
+// ==========================================
+// RUTE TAMBAH TIKET BARU (PERBAIKAN AMAN)
+// ==========================================
+router.post("/", async (req, res) => {
+  const { title, description, status } = req.body;
+
+  // Log untuk memastikan data terkirim dari Vue frontend
+  console.log("Data masuk ke backend:", req.body);
+
+  try {
+    // Jalankan query dengan tanda parameter PostgreSQL $1, $2, $3
+    const result = await pool.query(
+      "INSERT INTO tickets (title, description, status) VALUES ($1, $2, $3) RETURNING *",
+      [title, description, status || "open"],
+    );
+
+    // Validasi penanganan data secara aman agar tidak memicu crash 500
+    const newTicket =
+      result.rows && result.rows.length > 0 ? result.rows[0] : null;
+
+    res.status(201).json({
+      message: "Tiket berhasil ditambahkan",
+      ticket: newTicket,
+      ticketId: newTicket ? newTicket.id : null,
+    });
+  } catch (error) {
+    console.error("Detail Error PostgreSQL:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// 2. RUTE HAPUS TIKET (POSTGRESQL)
+// ==========================================
+router.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query("SELECT * FROM tickets WHERE id = $1", [
-      id,
-    ]);
-
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ status: "fail", message: "Tiket tidak ditemukan" });
-    }
-
-    res.status(200).json({ status: "success", data: result.rows[0] });
+    // Menggunakan $1 untuk parameter PostgreSQL
+    await pool.query("DELETE FROM tickets WHERE id = $1", [id]);
+    res.json({ message: `Tiket dengan ID ${id} berhasil dihapus` });
   } catch (error) {
-    console.error("❌ Gagal mengambil detail tiket:", error.message);
-    res.status(500).json({ status: "error", message: "Internal Server Error" });
-  }
-});
-// 3. UPDATE TICKET STATUS: Memperbarui status tiket berdasarkan ID
-router.put("/:id/status", async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body; // Mengambil status baru dari body request (contoh: 'resolved' atau 'closed')
-
-  // Validasi sederhana agar input status sesuai dengan aturan bisnis kita
-  const validStatuses = ["open", "resolved", "closed"];
-  if (!status || !validStatuses.includes(status)) {
-    return res.status(400).json({
-      status: "fail",
-      message: "Status tidak valid. Pilih antara: open, resolved, atau closed.",
-    });
-  }
-
-  try {
-    // Jalankan query UPDATE ke database PostgreSQL
-    const result = await pool.query(
-      "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
-      [status, id],
-    );
-
-    // Jika data tiket tidak ditemukan
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ status: "fail", message: "Tiket tidak ditemukan" });
-    }
-
-    // Respons sukses dengan mengembalikan data tiket yang sudah terupdate
-    res.status(200).json({
-      status: "success",
-      message: `Status tiket berhasil diperbarui menjadi ${status}`,
-      data: result.rows[0],
-    });
-  } catch (error) {
-    console.error("❌ Gagal memperbarui status tiket:", error.message);
-    res.status(500).json({ status: "error", message: "Internal Server Error" });
-  }
-});
-// 4. GET TICKET STATISTICS: Menghitung jumlah tiket berdasarkan status
-router.get("/analytics/stats", async (req, res) => {
-  try {
-    // Query untuk menghitung jumlah berdasarkan status menggunakan COUNT dan GROUP BY
-    const result = await pool.query(
-      `SELECT status, COUNT(*) as total 
-       FROM tickets 
-       GROUP BY status`,
-    );
-
-    // Template objek untuk menampung hasil agar formatnya rapi
-    const stats = {
-      open: 0,
-      resolved: 0,
-      closed: 0,
-    };
-
-    // Memasukkan hasil query dari PostgreSQL ke dalam objek stats
-    result.rows.forEach((row) => {
-      if (stats.hasOwnProperty(row.status)) {
-        stats[row.status] = parseInt(row.total);
-      }
-    });
-
-    // Menghitung total keseluruhan tiket yang ada
-    const totalTickets = stats.open + stats.resolved + stats.closed;
-
-    res.status(200).json({
-      status: "success",
-      data: {
-        summary: stats,
-        total: totalTickets,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Gagal mengambil statistik tiket:", error.message);
-    res.status(500).json({ status: "error", message: "Internal Server Error" });
+    console.error("Error deleting ticket:", error);
+    res
+      .status(500)
+      .json({ error: "Gagal menghapus tiket dari database PostgreSQL" });
   }
 });
 module.exports = router;
