@@ -156,6 +156,9 @@ import {
   CategoryScale,
   LinearScale,
 } from 'chart.js'
+const changeStatus = async (ticketId, statusBaru) => {
+  await ticketStore.updateTicketStatus(ticketId, 'resolved')
+}
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 
@@ -188,9 +191,12 @@ const handleCreateTicket = async () => {
 }
 
 // Handler Mengubah Status Tiket
-const handleUpdateStatus = async (id, newStatus) => {
-  if (typeof ticketStore.updateTicketStatus === 'function') {
-    await ticketStore.updateTicketStatus(id, newStatus)
+const handleUpdateStatus = async (ticketId, newStatus) => {
+  try {
+    // Panggil action store dengan mengirimkan dua argumen terpisah
+    await ticketStore.updateTicketStatus(ticketId, newStatus)
+  } catch (error) {
+    console.error('Gagal memperbarui status di view:', error)
   }
 }
 

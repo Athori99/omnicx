@@ -106,6 +106,32 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// ==========================================
+// RUTE UPDATE STATUS TIKET (PUT)
+// ==========================================
+router.put("/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // Mengambil status baru ('open', 'resolved', 'closed')
+
+  try {
+    const text = "UPDATE tickets SET status = $1 WHERE id = $2 RETURNING *";
+    const values = [status, id];
+
+    const result = await pool.query(text, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Tiket tidak ditemukan" });
+    }
+
+    res.status(200).json({
+      message: "Status tiket berhasil diperbarui",
+      ticket: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Error saat update status:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ==========================================
 // 2. RUTE HAPUS TIKET (POSTGRESQL)

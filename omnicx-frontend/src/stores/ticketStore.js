@@ -32,6 +32,26 @@ export const useTicketStore = defineStore('ticket', {
         this.isLoading = false
       }
     },
+    async updateTicketStatus(ticketId, newStatus) {
+      try {
+        const response = await axios.put(`${API_URL}/${ticketId}/status`, { status: newStatus })
+
+        await this.fetchTickets()
+        if (typeof this.fetchTicketStats === 'function') {
+          await this.fetchTicketStats()
+        }
+
+        return response.data
+      } catch (err) {
+        // Tambahkan baris ini untuk melihat detail penolakan dari server
+        console.error(
+          'Detail error saat UPDATE status:',
+          err.response ? err.response.data : err.message,
+        )
+        alert('Gagal memperbarui status tiket.')
+        throw err
+      }
+    },
 
     // 2. Ambil Data Statistik Tiket untuk Grafik
     async fetchTicketStats() {
@@ -86,16 +106,24 @@ export const useTicketStore = defineStore('ticket', {
     },
 
     // 5. Update Status Tiket via Dropdown Cepat (UPDATE)
-    async updateTicketStatus(id, newStatus) {
+    async updateTicketStatus(ticketId, newStatus) {
       try {
-        // Asumsi backend kamu punya rute PUT /api/tickets/:id untuk update status
-        await axios.put(`${API_URL}/${id}`, { status: newStatus })
+        // Pastikan URL-nya bersih terbentuk menjadi /api/tickets/26/status
+        const response = await axios.put(`${API_URL}/${ticketId}/status`, { status: newStatus })
 
         await this.fetchTickets()
-        await this.fetchTicketStats()
+        if (typeof this.fetchTicketStats === 'function') {
+          await this.fetchTicketStats()
+        }
+
+        return response.data
       } catch (err) {
-        console.error(err)
+        console.error(
+          'Detail error saat UPDATE status:',
+          err.response ? err.response.data : err.message,
+        )
         alert('Gagal memperbarui status tiket.')
+        throw err
       }
     },
   },

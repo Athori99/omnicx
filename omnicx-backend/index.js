@@ -1,4 +1,6 @@
 const express = require("express");
+// Panggil cronService agar penjadwalan berjalan di background server
+require("./services/cronService");
 const pool = require("./db");
 const { syncExternalTickets } = require("./syncService");
 const ticketRoutes = require("./routes/ticketRoutes"); // 1. Impor route tiket baru
