@@ -4,3 +4,6 @@ Content-Type: application/json
 {
   "status": "resolved"
 }
+### 
+### Mengambil Statistik dan Analitik Tiket
+GET http://localhost:5000/api/tickets/analytics/stats HTTP/1.1
